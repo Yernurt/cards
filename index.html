@@ -28,6 +28,8 @@ mark{background:var(--mark);color:inherit;border-radius:4px;padding:0 4px;font-w
 .on{background:var(--mark);font-weight:700;border-radius:4px}
 .back{border-top:1px solid var(--line);padding-top:14px}
 .tr{font-size:1.2rem;margin:0 0 12px}
+.tr.ru{font-size:1.05rem;color:var(--muted);margin:-6px 0 12px}
+.kk.ru{font-weight:400;color:var(--muted)}
 .kk{font-size:1.05rem;font-weight:700;margin:0 0 4px}
 .def{color:var(--muted);margin:0}
 .row{display:flex;flex-wrap:wrap;gap:10px;margin-top:auto}
@@ -81,6 +83,7 @@ var BASE=[
 ["We stopped at a [[gas station]] to fill the tank.","жанармай бекеті","a place where you buy gas for your car"]
 ];
 var TR=["Жұмысқа дейін кофе ішіп алайыншы.","Көшемен емес, тротуармен жүріңіз.","Лифт бұзылған, сондықтан біз баспалдақпен көтеріліп жатырмыз.","Қағазды қоқыс жәшігіне тастаңыз.","Автобус сонша адам көп болды, мен тұруға мәжбүр болдым.","Зарядтағышыңды бір минутқа алып тұрсам бола ма?","Әмиянымды үйде ұмытып кетіппін.","Қайтару қажет болса деп, чекті сақтап қой.","Азық-түлік дүкенінде ұзын кезек тұр.","Мұны өзіммен алып кетсем бола ма?","Мен қала орталығындағы шағын пәтерде тұрамын.","Бұл аяқкиім арзан, бірақ әдемі көрінеді.","Сені сағат алтыда алып кетемін.","Ұзақ ұшудан кейін мен қатты шаршадым.","Бак толтыру үшін жанармай бекетіне тоқтадық."];
+var RUK=["схватить, быстро взять", "тротуар", "лифт", "мусорное ведро, урна", "многолюдный, переполненный", "одолжить (взять на время)", "кошелёк", "чек", "очередь", "с собой (еда на вынос)", "квартира", "дешёвый", "заехать за тобой, забрать тебя", "совершенно без сил, измотанный", "заправка (АЗС)"],RUT=["Давай я куплю кофе перед работой.", "Пожалуйста, идите по тротуару, а не по дороге.", "Лифт сломан, поэтому мы идём по лестнице.", "Выбросьте бумагу в мусорное ведро.", "Автобус был так переполнен, что мне пришлось стоять.", "Можно одолжить у тебя зарядку на минуту?", "Я забыл кошелёк дома.", "Сохрани чек на случай, если нужно будет вернуть товар.", "В продуктовом магазине длинная очередь.", "Можно это с собой?", "Я живу в маленькой квартире в центре города.", "Эти туфли дешёвые, но выглядят хорошо.", "Я заеду за тобой в шесть.", "После долгого перелёта я был совершенно без сил.", "Мы остановились на заправке, чтобы заправить машину."];
 var KNOWN_KEY="eng-cards-known-v1",known=[];
 try{known=JSON.parse(localStorage.getItem(KNOWN_KEY)||"[]")}catch(e){known=[]}
 function saveKnown(){try{localStorage.setItem(KNOWN_KEY,JSON.stringify(known))}catch(e){}}
@@ -92,7 +95,7 @@ var i=s.toLowerCase().indexOf(w.toLowerCase());if(i<0)return esc(s);
 return esc(s.slice(0,i))+"<mark>"+esc(s.slice(i,i+w.length))+"</mark>"+esc(s.slice(i+w.length))}
 function wordOf(c){var m=c[0].match(/\[\[(.+?)\]\]/);return m?m[1]:c[3]}
 var SHEET=null;
-function all(){var base=SHEET?SHEET.map(function(r){return[r.s,r.k,r.d,r.w,r.t]}):BASE.map(function(c,i){return[c[0],c[1],c[2],null,TR[i]]});return base.concat(custom.map(function(c){return[c.s,c.k||"",c.d||"",c.w,c.t||""]}))}
+function all(){var base=SHEET?SHEET.map(function(r){return[r.s,r.k,r.d,r.w,r.t,r.rk,r.rt]}):BASE.map(function(c,i){return[c[0],c[1],c[2],null,TR[i],RUK[i],RUT[i]]});return base.concat(custom.map(function(c){return[c.s,c.k||"",c.d||"",c.w,c.t||""]}))}
 function start(){var a=all();queue=[];a.forEach(function(c,i){if(known.indexOf(c[0])<0)queue.push(i)});total=a.length;next()}
 var rec=null,chunks=[],myUrl=null,micMsg="",myBuf=null,myOnset=0,ctx=null,src=null;
 function micStart(){
@@ -143,8 +146,8 @@ last=re.lastIndex;prevOn=on;i++}
 return out+esc(p.plain.slice(last))}
 function wordBack(c){var o=wordOf(c);
 if(selW&&selW.toLowerCase()!==o.toLowerCase()){var q=encodeURIComponent(selW.toLowerCase());
-return '<p class="kk">'+esc(selW)+'</p><p class="def">Мағынасын суретке қарап өзің тап. Тексеру үшін:</p><div class="row" style="margin-top:10px"><a class="btn" target="_blank" rel="noopener" href="https://translate.google.com/?sl=en&tl=kk&text='+q+'&op=translate">Google Translate</a><a class="btn" target="_blank" rel="noopener" href="https://dictionary.cambridge.org/dictionary/english/'+q+'">Cambridge</a></div>'}
-return '<p class="kk">'+esc(c[1]||"—")+'</p>'+(c[2]?'<p class="def">'+esc(c[2])+'</p>':'')}
+return '<p class="kk">'+esc(selW)+'</p><p class="def">Мағынасын суретке қарап өзің тап. Тексеру үшін:</p><div class="row" style="margin-top:10px"><a class="btn" target="_blank" rel="noopener" href="https://translate.google.com/?sl=en&tl=kk&text='+q+'&op=translate">Google Translate (KK)</a><a class="btn" target="_blank" rel="noopener" href="https://translate.google.com/?sl=en&tl=ru&text='+q+'&op=translate">Google Translate (RU)</a><a class="btn" target="_blank" rel="noopener" href="https://dictionary.cambridge.org/dictionary/english/'+q+'">Cambridge</a></div>'}
+return '<p class="kk">'+esc(c[1]||"—")+'</p>'+(c[5]?'<p class="kk ru">'+esc(c[5])+'</p>':'')+(c[2]?'<p class="def">'+esc(c[2])+'</p>':'')}
 function next(){shown=false;sel=null;selW=null;micStop();if(myUrl){URL.revokeObjectURL(myUrl);myUrl=null}myBuf=null;stopMine();micMsg="";cur=queue.length?queue[0]:null;render()}
 function render(){
 var a=all(),st=document.getElementById("stage"),done=total-queue.length;
@@ -155,7 +158,7 @@ document.getElementById("again").onclick=function(){known=[];saveKnown();start()
 var c=a[cur],w=selW||wordOf(c),h='<div class="card"><p class="sent">'+sentHtml(c)+'</p><p class="tip" style="margin:0">Кез келген сөзді бас: сары белгі сол сөзге ауысады, сурет те сол сөз бойынша ашылады.</p>';
 h+='<div class="row"><a class="btn" target="_blank" rel="noopener" href="https://www.google.com/search?tbm=isch&q='+encodeURIComponent(w)+'">Суретті көру</a><button id="say" type="button">Тыңдау</button><button id="slow" type="button">Баяу тыңдау</button></div>';
 h+='<div class="row">'+(rec?'<button id="micstop" type="button">⏹ Тоқтату</button><span class="tip" style="margin:0;align-self:center">Жазылуда… сөйле</span>':'<button id="mic" type="button">🎤 Жазу</button>')+(myUrl&&!rec?'<button id="mine" type="button">▶ Менің дауысым</button><button id="cmp" type="button">⇄ Салыстыру</button>':'')+'</div>'+(micMsg?'<p class="tip" style="margin:0">'+esc(micMsg)+'</p>':'');
-if(shown){h+='<div class="back">'+(c[4]?'<p class="tr">'+esc(c[4])+'</p>':'')+wordBack(c)+'</div>';
+if(shown){h+='<div class="back">'+(c[4]?'<p class="tr">'+esc(c[4])+'</p>':'')+(c[6]?'<p class="tr ru">'+esc(c[6])+'</p>':'')+wordBack(c)+'</div>';
 h+='<div class="row"><button id="hard" type="button">Қайта қарау</button><button class="main" id="know" type="button">Білемін</button></div>'}
 else h+='<div class="row"><button class="main" id="show" type="button">Жауабын көрсету</button></div>';
 st.innerHTML=h+'</div>';
@@ -193,7 +196,7 @@ function loadSheet(){
 if(!SHEET_CSV_URL){start();return}
 document.getElementById("stage").innerHTML='<div class="card"><p class="sent">Жүктелуде…</p></div>';
 fetch(SHEET_CSV_URL).then(function(r){return r.text()}).then(function(t){
-var rows=parseCSV(t).slice(1).filter(function(r){return r[1]&&r[1].trim()}).map(function(r){return{w:(r[0]||"").trim(),s:r[1].trim(),k:(r[2]||"").trim(),d:(r[3]||"").trim(),t:(r[4]||"").trim()}});
+var rows=parseCSV(t).slice(1).filter(function(r){return r[1]&&r[1].trim()}).map(function(r){return{w:(r[0]||"").trim(),s:r[1].trim(),k:(r[2]||"").trim(),d:(r[3]||"").trim(),t:(r[4]||"").trim(),rk:(r[5]||"").trim(),rt:(r[6]||"").trim()}});
 SHEET=rows.length?rows:null;start()}).catch(function(){start()})}
 loadSheet();
 </script>
