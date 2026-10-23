@@ -165,7 +165,7 @@ st.innerHTML=h+'</div>';
 var b,sy=document.getElementById("say"),sl=document.getElementById("slow");
 Array.prototype.forEach.call(st.querySelectorAll(".w"),function(el){var f=function(){sel=+el.getAttribute("data-i");selW=el.getAttribute("data-w");render()};el.onclick=f;el.onkeydown=function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();f()}}});
 if(sy)sy.onclick=function(){speak(c[0],1)};
-if(sl)sl.onclick=function(){speak(c[0],.65)};
+if(sl)sl.onclick=function(){speak(c[0],.5)};
 var e1;if(e1=document.getElementById("mic"))e1.onclick=micStart;
 if(e1=document.getElementById("micstop"))e1.onclick=micStop;
 if(e1=document.getElementById("mine"))e1.onclick=playMine;
