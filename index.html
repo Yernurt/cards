@@ -94,7 +94,7 @@ function wordOf(c){var m=c[0].match(/\[\[(.+?)\]\]/);return m?m[1]:c[3]}
 var SHEET=null;
 function all(){var base=SHEET?SHEET.map(function(r){return[r.s,r.k,r.d,r.w,r.t]}):BASE.map(function(c,i){return[c[0],c[1],c[2],null,TR[i]]});return base.concat(custom.map(function(c){return[c.s,c.k||"",c.d||"",c.w,c.t||""]}))}
 function start(){var a=all();queue=[];a.forEach(function(c,i){if(known.indexOf(c[0])<0)queue.push(i)});total=a.length;next()}
-var rec=null,chunks=[],myUrl=null,micMsg="";
+var rec=null,chunks=[],myUrl=null,micMsg="",myBuf=null,myOnset=0,ctx=null,src=null;
 function micStart(){
 if(!navigator.mediaDevices||!window.MediaRecorder){micMsg="Бұл браузерде дауыс жазу қолдау таппайды.";render();return}
 if(window.speechSynthesis)speechSynthesis.cancel();
@@ -105,12 +105,23 @@ r.ondataavailable=function(e){if(e.data&&e.data.size)chunks.push(e.data)};
 r.onstop=function(){stream.getTracks().forEach(function(t){t.stop()});rec=null;
 if(rc!==cur)return;
 if(myUrl)URL.revokeObjectURL(myUrl);
-myUrl=URL.createObjectURL(new Blob(chunks,{type:r.mimeType||"audio/webm"}));render()};
+var bl=new Blob(chunks,{type:r.mimeType||"audio/webm"});myUrl=URL.createObjectURL(bl);myBuf=null;myOnset=0;render();decodeMine(bl,rc)};
 r.start();micMsg="";render()
 }).catch(function(er){micMsg="Микрофон қолжетімсіз ("+(er&&er.name||"error")+"). Бет басқа беттің ішінде ашылған болуы мүмкін, оны жеке бетте ашып көр.";render()})}
 function micStop(){if(rec&&rec.state!=="inactive")rec.stop()}
-function playMine(){if(myUrl)new Audio(myUrl).play()}
-function speak(t,r,cb){if(rec)return;
+function decodeMine(bl,rc){
+try{ctx=ctx||new(window.AudioContext||window.webkitAudioContext)();
+bl.arrayBuffer().then(function(ab){return new Promise(function(ok,no){ctx.decodeAudioData(ab,ok,no)})}).then(function(buf){if(rc!==cur)return;myBuf=buf;myOnset=findOnset(buf)}).catch(function(){})}catch(e){}}
+function findOnset(buf){var d=buf.getChannelData(0),w=Math.max(1,Math.round(buf.sampleRate*0.01)),n=Math.floor(d.length/w),r=[],i,j,s,x,peak=0;
+for(i=0;i<n;i++){s=0;for(j=0;j<w;j++){x=d[i*w+j];s+=x*x}r.push(Math.sqrt(s/w));if(r[i]>peak)peak=r[i]}
+var thr=Math.max(peak*0.2,0.008);
+for(i=0;i<n-2;i++){if(r[i]>thr&&r[i+1]>thr&&r[i+2]>thr)return Math.max(0,i*0.01-0.05)}
+return 0}
+function stopMine(){try{if(src)src.stop()}catch(e){}src=null}
+function playMine(from){stopMine();from=typeof from==="number"?from:0;
+if(myBuf&&ctx){if(ctx.state==="suspended")ctx.resume();src=ctx.createBufferSource();src.buffer=myBuf;src.connect(ctx.destination);src.start(0,from);return}
+if(myUrl)new Audio(myUrl).play()}
+function speak(t,r,cb,st){if(rec)return;
 if(!window.speechSynthesis){alert("Бұл браузер дауыстап оқуды қолдамайды.");return}
 speechSynthesis.cancel();
 var u=new SpeechSynthesisUtterance(t.replace(/\[\[|\]\]/g,""));
@@ -118,6 +129,7 @@ u.lang="en-US";u.rate=r;
 var v=speechSynthesis.getVoices().filter(function(x){return x.lang==="en-US"||x.lang==="en_US"});
 if(v.length)u.voice=v[0];
 if(cb)u.onend=cb;
+if(st)u.onstart=st;
 speechSynthesis.speak(u)}
 function parts(c){var m=c[0].match(/\[\[(.+?)\]\]/),plain=c[0].replace(/\[\[|\]\]/g,""),a,b;
 if(m){a=c[0].indexOf("[[");b=a+m[1].length}else{a=c[3]?plain.toLowerCase().indexOf(c[3].toLowerCase()):-1;b=a<0?-1:a+c[3].length}
@@ -133,7 +145,7 @@ function wordBack(c){var o=wordOf(c);
 if(selW&&selW.toLowerCase()!==o.toLowerCase()){var q=encodeURIComponent(selW.toLowerCase());
 return '<p class="kk">'+esc(selW)+'</p><p class="def">Мағынасын суретке қарап өзің тап. Тексеру үшін:</p><div class="row" style="margin-top:10px"><a class="btn" target="_blank" rel="noopener" href="https://translate.google.com/?sl=en&tl=kk&text='+q+'&op=translate">Google Translate</a><a class="btn" target="_blank" rel="noopener" href="https://dictionary.cambridge.org/dictionary/english/'+q+'">Cambridge</a></div>'}
 return '<p class="kk">'+esc(c[1]||"—")+'</p>'+(c[2]?'<p class="def">'+esc(c[2])+'</p>':'')}
-function next(){shown=false;sel=null;selW=null;micStop();if(myUrl){URL.revokeObjectURL(myUrl);myUrl=null}micMsg="";cur=queue.length?queue[0]:null;render()}
+function next(){shown=false;sel=null;selW=null;micStop();if(myUrl){URL.revokeObjectURL(myUrl);myUrl=null}myBuf=null;stopMine();micMsg="";cur=queue.length?queue[0]:null;render()}
 function render(){
 var a=all(),st=document.getElementById("stage"),done=total-queue.length;
 document.getElementById("bar").style.width=(total?done/total*100:0)+"%";
@@ -154,7 +166,7 @@ if(sl)sl.onclick=function(){speak(c[0],.65)};
 var e1;if(e1=document.getElementById("mic"))e1.onclick=micStart;
 if(e1=document.getElementById("micstop"))e1.onclick=micStop;
 if(e1=document.getElementById("mine"))e1.onclick=playMine;
-if(e1=document.getElementById("cmp"))e1.onclick=function(){speak(c[0],1,playMine)};
+if(e1=document.getElementById("cmp"))e1.onclick=function(){stopMine();var go=false;function f(){if(!go){go=true;playMine(myOnset)}}speak(c[0],1,null,f);setTimeout(f,1500)};
 if(b=document.getElementById("show"))b.onclick=function(){shown=true;render();document.getElementById("know")&&document.getElementById("know").focus()};
 if(b=document.getElementById("know"))b.onclick=function(){var s=all()[cur][0];if(known.indexOf(s)<0){known.push(s);saveKnown()}queue.shift();next()};
 if(b=document.getElementById("hard"))b.onclick=function(){queue.push(queue.shift());next()}}
