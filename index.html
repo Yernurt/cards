@@ -108,6 +108,7 @@ var rec=null,chunks=[],myUrl=null,micMsg="",myBuf=null,myOnset=0,ctx=null,src=nu
 function micStart(){
 if(!navigator.mediaDevices||!window.MediaRecorder){micMsg="Бұл браузерде дауыс жазу қолдау таппайды.";render();return}
 if(window.speechSynthesis)speechSynthesis.cancel();
+stopAI();
 var rc=cur;
 navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}).then(function(stream){
 chunks=[];var r=new MediaRecorder(stream);rec=r;
@@ -146,10 +147,35 @@ function sortedVoices(){return enVoices().sort(function(a,b){return vScore(b)-vS
 function pickVoice(){var vs=sortedVoices(),i;
 if(voiceName)for(i=0;i<vs.length;i++)if(vs[i].name===voiceName)return vs[i];
 return vs.length?vs[0]:null}
-function fillVoices(){var sel=document.getElementById("voice"),vs=sortedVoices(),cur=pickVoice();
-if(!vs.length){sel.innerHTML='<option>Ағылшын дауысы табылмады</option>';return}
-sel.innerHTML=vs.map(function(v){return'<option value="'+esc(v.name)+'"'+(cur&&v.name===cur.name?' selected':'')+'>'+esc(v.name)+' ('+v.lang+')</option>'}).join("")}
+function fillVoices(){var sel=document.getElementById("voice"),vs=sortedVoices(),cur=pickVoice(),ai=aiOn(),opt=TTS_URL?'<option value="__ai__"'+(ai?' selected':'')+'>AI дауыс (табиғи)</option>':"";
+if(!vs.length&&!TTS_URL){sel.innerHTML='<option>Ағылшын дауысы табылмады</option>';return}
+sel.innerHTML=opt+vs.map(function(v){return'<option value="'+esc(v.name)+'"'+(!ai&&cur&&v.name===cur.name?' selected':'')+'>'+esc(v.name)+' ('+v.lang+')</option>'}).join("")}
+var aiCache={},aiAudio=null;
+function aiOn(){return !!TTS_URL&&(voiceName===""||voiceName==="__ai__")}
+function isSheetSentence(t){if(!SHEET)return false;var p=t.replace(/\[\[|\]\]/g,"");return SHEET.some(function(r){return r.s.replace(/\[\[|\]\]/g,"")===p})}
+function wav(pcm,rate){var hd=new ArrayBuffer(44),d=new DataView(hd);
+function s(o,t){for(var i=0;i<t.length;i++)d.setUint8(o+i,t.charCodeAt(i))}
+s(0,"RIFF");d.setUint32(4,36+pcm.length,true);s(8,"WAVE");s(12,"fmt ");d.setUint32(16,16,true);d.setUint16(20,1,true);d.setUint16(22,1,true);d.setUint32(24,rate,true);d.setUint32(28,rate*2,true);d.setUint16(32,2,true);d.setUint16(34,16,true);s(36,"data");d.setUint32(40,pcm.length,true);
+var out=new Uint8Array(44+pcm.length);out.set(new Uint8Array(hd),0);out.set(pcm,44);return out}
+function b64ToUrl(j){var bin=atob(j.b64),n=bin.length,u=new Uint8Array(n),i,type="audio/mpeg";
+for(i=0;i<n;i++)u[i]=bin.charCodeAt(i);
+if(j.fmt==="pcm"){u=wav(u,j.rate||44100);type="audio/wav"}
+return URL.createObjectURL(new Blob([u],{type:type}))}
+function aiFetch(t){var plain=t.replace(/\[\[|\]\]/g,"");
+if(aiCache[plain])return aiCache[plain];
+var pr=fetch(TTS_URL+"?t="+encodeURIComponent(plain)).then(function(r){return r.json()}).then(function(j){if(!j.ok)throw new Error(j.err||"tts");return b64ToUrl(j)});
+pr.catch(function(){delete aiCache[plain]});
+aiCache[plain]=pr;return pr}
+function stopAI(){if(aiAudio){try{aiAudio.pause()}catch(e){}aiAudio=null}}
+function speakAI(t,r,cb,st){stopAI();if(window.speechSynthesis)speechSynthesis.cancel();
+aiFetch(t).then(function(url){var a=new Audio(url);aiAudio=a;a.playbackRate=r||1;
+if(st)a.addEventListener("playing",function(){st()},{once:true});
+if(cb)a.onended=cb;
+return a.play()}).catch(function(){browserSpeak(t,r,cb,st)})}
 function speak(t,r,cb,st){if(rec)return;
+if(aiOn()&&isSheetSentence(t)){speakAI(t,r,cb,st);return}
+stopAI();browserSpeak(t,r,cb,st)}
+function browserSpeak(t,r,cb,st){
 if(!window.speechSynthesis){alert("Бұл браузер дауыстап оқуды қолдамайды.");return}
 speechSynthesis.cancel();
 var u=new SpeechSynthesisUtterance(t.replace(/\[\[|\]\]/g,""));
@@ -172,7 +198,7 @@ function wordBack(c){var o=wordOf(c);
 if(selW&&selW.toLowerCase()!==o.toLowerCase()){var q=encodeURIComponent(selW.toLowerCase());
 return '<p class="kk">'+esc(selW)+'</p><p class="def">Мағынасын суретке қарап өзің тап. Тексеру үшін:</p><div class="row" style="margin-top:10px"><a class="btn" target="_blank" rel="noopener" href="https://translate.google.com/?sl=en&tl=kk&text='+q+'&op=translate">Google Translate (KK)</a><a class="btn" target="_blank" rel="noopener" href="https://translate.google.com/?sl=en&tl=ru&text='+q+'&op=translate">Google Translate (RU)</a><a class="btn" target="_blank" rel="noopener" href="https://dictionary.cambridge.org/dictionary/english/'+q+'">Cambridge</a></div>'}
 return '<p class="kk">'+esc(c[1]||"—")+'</p>'+(c[5]?'<p class="kk ru">'+esc(c[5])+'</p>':'')+(c[2]?'<p class="def">'+esc(c[2])+'</p>':'')}
-function next(){shown=false;sel=null;selW=null;micStop();if(myUrl){URL.revokeObjectURL(myUrl);myUrl=null}myBuf=null;stopMine();micMsg="";cur=queue.length?queue[0]:null;render()}
+function next(){shown=false;sel=null;selW=null;micStop();if(myUrl){URL.revokeObjectURL(myUrl);myUrl=null}myBuf=null;stopMine();stopAI();micMsg="";cur=queue.length?queue[0]:null;render()}
 function render(){
 var a=all(),st=document.getElementById("stage"),done=total-queue.length;
 document.getElementById("bar").style.width=(total?done/total*100:0)+"%";
@@ -188,6 +214,7 @@ else h+='<div class="row"><button class="main" id="show" type="button">Жауа�
 st.innerHTML=h+'</div>';
 var b,sy=document.getElementById("say"),sl=document.getElementById("slow");
 Array.prototype.forEach.call(st.querySelectorAll(".w"),function(el){var f=function(){sel=+el.getAttribute("data-i");selW=el.getAttribute("data-w");render()};el.onclick=f;el.onkeydown=function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();f()}}});
+if(aiOn()&&isSheetSentence(c[0]))aiFetch(c[0]).catch(function(){});
 if(sy)sy.onclick=function(){speak(c[0],1)};
 if(sl)sl.onclick=function(){speak(c[0],.65)};
 var e1;if(e1=document.getElementById("mic"))e1.onclick=micStart;
@@ -222,9 +249,10 @@ document.getElementById("stage").innerHTML='<div class="card"><p class="sent">Ж
 fetch(SHEET_CSV_URL).then(function(r){return r.text()}).then(function(t){
 var rows=parseCSV(t).slice(1).filter(function(r){return r[1]&&r[1].trim()}).map(function(r){return{w:(r[0]||"").trim(),s:r[1].trim(),k:(r[2]||"").trim(),d:(r[3]||"").trim(),t:(r[4]||"").trim(),rk:(r[5]||"").trim(),rt:(r[6]||"").trim()}});
 SHEET=rows.length?rows:null;start()}).catch(function(){start()})}
-if(window.speechSynthesis){fillVoices();speechSynthesis.onvoiceschanged=fillVoices}
+var TTS_URL="https://script.google.com/macros/s/AKfycbwDQP1cVzG-KGnRUnsFMX_5wahd7yCsAO_RNSkMERlyJrYUpb20CbmzCn57mBob5fWl/exec";
+fillVoices();if(window.speechSynthesis)speechSynthesis.onvoiceschanged=fillVoices;
 document.getElementById("voice").onchange=function(){voiceName=this.value;try{localStorage.setItem(VKEY,voiceName)}catch(e){}};
-document.getElementById("vtest").onclick=function(){speak("Hi! This is how I sound. Let me grab a coffee before work.",1)};
+document.getElementById("vtest").onclick=function(){var s=(SHEET&&SHEET.length)?SHEET[0].s:"Hi! This is how I sound. Let me grab a coffee before work.";speak(s,1)};
 loadSheet();
 </script>
 </body>
