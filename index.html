@@ -66,6 +66,15 @@ select{width:100%;font:inherit;padding:10px;border-radius:8px;border:1px solid v
 <p class="tip">Тізімнің басындағы дауыстар әдетте табиғирақ. Таңдауың осы браузерде сақталады. Таңдаған жылдамдығың карточкадағы «Өз жылдамдығым» батырмасына қолданылады.</p>
 </details>
 <details>
+<summary>AI-мен мәтін жасау</summary>
+<label for="glv">Деңгейің</label>
+<select id="glv"><option value="A1">A1 — бастаушы</option><option value="A2" selected>A2 — қарапайым</option><option value="B1">B1 — орташа</option><option value="B2">B2 — орташадан жоғары</option><option value="C1">C1 — жоғары</option></select>
+<label for="gtp">Тақырып (міндетті емес)</label><input id="gtp" autocomplete="off" placeholder="мысалы: кафеде, саяхат, жұмыс">
+<div class="row" style="margin-top:14px"><button class="main" id="gen" type="button">Мәтін жасау</button></div>
+<div class="tip" id="genmsg"></div>
+<p class="tip">Тақырып жазбасаң, AI өзі таңдайды. Мәтін 5 сөйлемнен тұрады, әр сөйлем жеке карточка болады. Бұл тегін модель, сондықтан аудармада қате болуы мүмкін, ондай карточканы «Жою» батырмасымен өшіре аласың. Жеке мәліметті жазба.</p>
+</details>
+<details>
 <summary>Өз сөзіңді қос</summary>
 <label for="nw">Сөз немесе тіркес</label><input id="nw" autocomplete="off">
 <label for="ns">Сөйлем (сөзді өзің құрастырған сөйлемге қой)</label><input id="ns" autocomplete="off">
@@ -108,7 +117,8 @@ var i=s.toLowerCase().indexOf(w.toLowerCase());if(i<0)return esc(s);
 return esc(s.slice(0,i))+"<mark>"+esc(s.slice(i,i+w.length))+"</mark>"+esc(s.slice(i+w.length))}
 function wordOf(c){var m=c[0].match(/\[\[(.+?)\]\]/);return m?m[1]:c[3]}
 var SHEET=null;
-function all(){var base=SHEET?SHEET.map(function(r){return[r.s,r.k,r.d,r.w,r.t,r.rk,r.rt]}):BASE.map(function(c,i){return[c[0],c[1],c[2],null,TR[i],RUK[i],RUT[i]]});return base.concat(custom.map(function(c){return[c.s,c.k||"",c.d||"",c.w,c.t||""]}))}
+function baseLen(){return SHEET?SHEET.length:BASE.length}
+function all(){var base=SHEET?SHEET.map(function(r){return[r.s,r.k,r.d,r.w,r.t,r.rk,r.rt]}):BASE.map(function(c,i){return[c[0],c[1],c[2],null,TR[i],RUK[i],RUT[i]]});return base.concat(custom.map(function(c){return[c.s,c.k||"",c.d||"",c.w,c.t||"",c.rk||"",c.rt||"",c.ai?1:0]}))}
 function start(){var a=all();queue=[];a.forEach(function(c,i){if(known.indexOf(c[0])<0)queue.push(i)});total=a.length;next()}
 var rec=null,chunks=[],myUrl=null,micMsg="",myBuf=null,myOnset=0,ctx=null,src=null;
 function micStart(){
@@ -160,6 +170,7 @@ if(!vs.length&&!TTS_URL){sel.innerHTML='<option>Ағылшын дауысы та
 sel.innerHTML=opt+vs.map(function(v){return'<option value="'+esc(v.name)+'"'+(!ai&&cur&&v.name===cur.name?' selected':'')+'>'+esc(v.name)+' ('+v.lang+')</option>'}).join("")}
 var aiCache={},aiAudio=null;
 function aiOn(){return !!TTS_URL&&(voiceName===""||voiceName==="__ai__")}
+function isCustomSentence(t){var p=t.replace(/\[\[|\]\]/g,"");return custom.some(function(c){return c.s.replace(/\[\[|\]\]/g,"")===p})}
 function isSheetSentence(t){if(!SHEET)return false;var p=t.replace(/\[\[|\]\]/g,"");return SHEET.some(function(r){return r.s.replace(/\[\[|\]\]/g,"")===p})}
 function wav(pcm,rate){var hd=new ArrayBuffer(44),d=new DataView(hd);
 function s(o,t){for(var i=0;i<t.length;i++)d.setUint8(o+i,t.charCodeAt(i))}
@@ -176,7 +187,7 @@ pr.catch(function(){delete aiCache[ck]});
 aiCache[ck]=pr;return pr}
 function stopAI(){if(aiAudio){try{aiAudio.pause()}catch(e){}aiAudio=null}}
 function speakAI(t,r,cb,st){stopAI();if(window.speechSynthesis)speechSynthesis.cancel();
-aiFetch(t).then(function(url){var a=new Audio(url);aiAudio=a;a.playbackRate=r||1;
+aiFetch(t,!isSheetSentence(t)).then(function(url){var a=new Audio(url);aiAudio=a;a.playbackRate=r||1;
 if(st)a.addEventListener("playing",function(){st()},{once:true});
 if(cb)a.onended=cb;
 return a.play()}).catch(function(){browserSpeak(t,r,cb,st)})}
@@ -188,7 +199,7 @@ aiFetch(text,true).then(function(url){m.textContent="";var a=new Audio(url);aiAu
 return}
 speak(text,rate)}
 function speak(t,r,cb,st){if(rec)return;
-if(aiOn()&&isSheetSentence(t)){speakAI(t,r,cb,st);return}
+if(aiOn()&&(isSheetSentence(t)||isCustomSentence(t))){speakAI(t,r,cb,st);return}
 stopAI();browserSpeak(t,r,cb,st)}
 function browserSpeak(t,r,cb,st){
 if(!window.speechSynthesis){alert("Бұл браузер дауыстап оқуды қолдамайды.");return}
@@ -209,7 +220,7 @@ if(gap)out+=(sel===null&&i>0&&prevOn&&on)?'<span class="on">'+esc(gap)+'</span>'
 out+='<span class="w'+(on?' on':'')+'" role="button" tabindex="0" data-i="'+i+'" data-w="'+esc(m[0])+'">'+esc(m[0])+'</span>';
 last=re.lastIndex;prevOn=on;i++}
 return out+esc(p.plain.slice(last))}
-function wordBack(c){var o=wordOf(c);
+function wordBack(c){var o=wordOf(c)||"";
 if(selW&&selW.toLowerCase()!==o.toLowerCase()){var q=encodeURIComponent(selW.toLowerCase());
 return '<p class="kk">'+esc(selW)+'</p><p class="def">Мағынасын суретке қарап өзің тап. Тексеру үшін:</p><div class="row" style="margin-top:10px"><a class="btn" target="_blank" rel="noopener" href="https://translate.google.com/?sl=en&tl=kk&text='+q+'&op=translate">Google Translate (KK)</a><a class="btn" target="_blank" rel="noopener" href="https://translate.google.com/?sl=en&tl=ru&text='+q+'&op=translate">Google Translate (RU)</a><a class="btn" target="_blank" rel="noopener" href="https://dictionary.cambridge.org/dictionary/english/'+q+'">Cambridge</a></div>'}
 return '<p class="kk">'+esc(c[1]||"—")+'</p>'+(c[5]?'<p class="kk ru">'+esc(c[5])+'</p>':'')+(c[2]?'<p class="def">'+esc(c[2])+'</p>':'')}
@@ -223,8 +234,8 @@ document.getElementById("again").onclick=function(){known=[];saveKnown();start()
 var c=a[cur],w=selW||wordOf(c),h='<div class="card"><p class="sent">'+sentHtml(c)+'</p><p class="tip" style="margin:0">Кез келген сөзді бас: сары белгі сол сөзге ауысады, сурет те сол сөз бойынша ашылады.</p>';
 h+='<div class="row"><a class="btn" target="_blank" rel="noopener" href="https://www.google.com/search?tbm=isch&q='+encodeURIComponent(w)+'">Суретті көру</a><button id="say" type="button">Тыңдау</button><button id="slow" type="button">Баяу 0.65x</button><button id="spdgo" type="button">▶ Өз жылдамдығым '+userSpeed.toFixed(2)+'x</button></div>';
 h+='<div class="row">'+(rec?'<button id="micstop" type="button">⏹ Тоқтату</button><span class="tip" style="margin:0;align-self:center">Жазылуда… сөйле</span>':'<button id="mic" type="button">🎤 Жазу</button>')+(myUrl&&!rec?'<button id="mine" type="button">▶ Менің дауысым</button><button id="cmp" type="button">⇄ Салыстыру</button>':'')+'</div>'+(micMsg?'<p class="tip" style="margin:0">'+esc(micMsg)+'</p>':'');
-if(shown){h+='<div class="back">'+(c[4]?'<p class="tr">'+esc(c[4])+'</p>':'')+(c[6]?'<p class="tr ru">'+esc(c[6])+'</p>':'')+wordBack(c)+'</div>';
-h+='<div class="row"><button id="hard" type="button">Қайта қарау</button><button class="main" id="know" type="button">Білемін</button></div>'}
+if(shown){h+='<div class="back">'+(c[4]?'<p class="tr">'+esc(c[4])+'</p>':'')+(c[6]?'<p class="tr ru">'+esc(c[6])+'</p>':'')+(c[7]?'<p class="tip" style="margin:0 0 8px">Қазақша аударманы AI жасады, қате болуы мүмкін. Тексеру:</p><div class="row" style="margin:0 0 12px"><a class="btn" target="_blank" rel="noopener" href="https://translate.google.com/?sl=en&tl=kk&text='+encodeURIComponent(c[0].replace(/\[\[|\]\]/g,""))+'&op=translate">Google Translate (KK)</a></div>':'')+wordBack(c)+'</div>';
+h+='<div class="row"><button id="hard" type="button">Қайта қарау</button><button class="main" id="know" type="button">Білемін</button>'+(cur>=baseLen()?'<button id="del" type="button">🗑 Жою</button>':'')+'</div>'}
 else h+='<div class="row"><button class="main" id="show" type="button">Жауабын көрсету</button></div>';
 st.innerHTML=h+'</div>';
 var b,sy=document.getElementById("say"),sl=document.getElementById("slow");
@@ -240,7 +251,8 @@ if(e1=document.getElementById("mine"))e1.onclick=playMine;
 if(e1=document.getElementById("cmp"))e1.onclick=function(){stopMine();var go=false;function f(){if(!go){go=true;playMine(myOnset)}}speak(c[0],1,null,f);setTimeout(f,1500)};
 if(b=document.getElementById("show"))b.onclick=function(){shown=true;render();document.getElementById("know")&&document.getElementById("know").focus()};
 if(b=document.getElementById("know"))b.onclick=function(){var s=all()[cur][0];if(known.indexOf(s)<0){known.push(s);saveKnown()}queue.shift();next()};
-if(b=document.getElementById("hard"))b.onclick=function(){queue.push(queue.shift());next()}}
+if(b=document.getElementById("hard"))b.onclick=function(){queue.push(queue.shift());next()};
+if(b=document.getElementById("del"))b.onclick=function(){var ci=cur-baseLen(),s=all()[cur][0];custom.splice(ci,1);try{localStorage.setItem(KEY,JSON.stringify(custom))}catch(e){}var ki=known.indexOf(s);if(ki>-1){known.splice(ki,1);saveKnown()}start()}}
 document.getElementById("add").onclick=function(){
 var w=document.getElementById("nw").value.trim(),s=document.getElementById("ns").value.trim(),k=document.getElementById("nk").value.trim(),m=document.getElementById("addmsg");
 if(!w||!s){m.textContent="Сөзді де, сөйлемді де жаз.";return}
@@ -250,6 +262,24 @@ document.getElementById("nw").value=document.getElementById("ns").value=document
 m.textContent="Қосылды. Ол қазіргі кезекке түсті.";
 queue.push(all().length-1);total++;if(cur===null)next();else render()};
 document.getElementById("reset").onclick=function(){known=[];saveKnown();start()};
+var GKEY="eng-cards-level-v1";
+try{var gl=localStorage.getItem(GKEY);if(gl)document.getElementById("glv").value=gl}catch(e){}
+document.getElementById("glv").onchange=function(){try{localStorage.setItem(GKEY,this.value)}catch(e){}};
+document.getElementById("gen").onclick=function(){
+var lv=document.getElementById("glv").value,tp=document.getElementById("gtp").value.trim(),m=document.getElementById("genmsg"),btn=this;
+if(typeof TTS_URL==="undefined"||!TTS_URL){m.textContent="AI қолжетімсіз.";return}
+btn.disabled=true;m.textContent="Мәтін жасалуда… (20–60 секунд кетуі мүмкін)";
+fetch(TTS_URL+"?story=1&level="+encodeURIComponent(lv)+"&topic="+encodeURIComponent(tp)).then(function(r){return r.json()}).then(function(j){
+btn.disabled=false;
+if(!j.ok||!j.items||!j.items.length){m.textContent=j.err==="limit"?"Сағаттық шек таусылды, кейінірек қайталап көр.":"Жасалмады, қайталап көр ("+(j.err||"қате")+").";return}
+var first=all().length;
+j.items.forEach(function(it){custom.push({w:it.w,s:it.s,k:it.k,d:it.d,t:it.t,rk:it.rk,rt:it.rt,ai:1})});
+try{localStorage.setItem(KEY,JSON.stringify(custom))}catch(e){}
+var idxs=j.items.map(function(_,i){return first+i});
+queue=idxs.concat(queue);total+=idxs.length;
+m.innerHTML="<b>"+lv+(tp?" · "+esc(tp):"")+":</b> "+esc(j.items.map(function(it){return it.s.replace(/\[\[|\]\]/g,"")}).join(" "));
+next()
+}).catch(function(){btn.disabled=false;m.textContent="Байланыс қатесі. Қайталап көр."})};
 var SHEET_CSV_URL="https://docs.google.com/spreadsheets/d/e/2PACX-1vT-gTVtuPGPLe-d8-t7LG78JSK5vXa2xTlnK6mSzbwgt0HXu9Nieu8Kunp9KOfFtlWGe5uka_ACjyj8/pub?gid=2018887702&single=true&output=csv";
 function parseCSV(t){var rows=[],row=[],f="",q=false,i,ch;
 for(i=0;i<t.length;i++){ch=t[i];
