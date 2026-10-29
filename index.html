@@ -42,6 +42,9 @@ summary{cursor:pointer;font-weight:700}
 label{display:block;margin:12px 0 4px;font-size:.95rem}
 input{width:100%;font:inherit;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
 .done{text-align:center;padding:30px 0}
+.spd{display:flex;flex-direction:column;gap:8px}
+.spd label{margin:0}
+input[type=range]{padding:0;border:0;background:transparent;accent-color:var(--accent);min-height:32px}
 select{width:100%;font:inherit;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
 .tip{color:var(--muted);font-size:.9rem;margin-top:16px}
 </style>
@@ -56,8 +59,11 @@ select{width:100%;font:inherit;padding:10px;border-radius:8px;border:1px solid v
 <details>
 <summary>Ағылшын дауысын таңдау</summary>
 <label for="voice">Дауыс</label><select id="voice"></select>
-<div class="row" style="margin-top:12px"><button id="vtest" type="button">Сынау</button></div>
-<p class="tip">Тізімнің басындағы дауыстар әдетте табиғирақ. Таңдауың осы браузерде сақталады.</p>
+<label for="spd">Өз жылдамдығың: <b id="spdv">0.80x</b></label><input id="spd" type="range" min="0.4" max="1.5" step="0.05" value="0.8">
+<label for="vtext">Сынауға арналған мәтін (бос қалдырсаң, дайын сөйлем оқылады)</label><input id="vtext" autocomplete="off" placeholder="I’ll pick you up at six.">
+<div class="row" style="margin-top:12px"><button id="vtest" type="button">Сынау</button><button id="vtest2" type="button">Өз жылдамдығыммен сынау</button></div>
+<p class="tip" id="vmsg" style="margin-top:10px"></p>
+<p class="tip">Тізімнің басындағы дауыстар әдетте табиғирақ. Таңдауың осы браузерде сақталады. Таңдаған жылдамдығың карточкадағы «Өз жылдамдығым» батырмасына қолданылады.</p>
 </details>
 <details>
 <summary>Өз сөзіңді қос</summary>
@@ -132,6 +138,8 @@ function stopMine(){try{if(src)src.stop()}catch(e){}src=null}
 function playMine(from){stopMine();from=typeof from==="number"?from:0;
 if(myBuf&&ctx){if(ctx.state==="suspended")ctx.resume();src=ctx.createBufferSource();src.buffer=myBuf;src.connect(ctx.destination);src.start(0,from);return}
 if(myUrl)new Audio(myUrl).play()}
+var SPKEY="eng-cards-speed-v1",userSpeed=0.8;
+try{var sv=parseFloat(localStorage.getItem(SPKEY));if(sv>=0.4&&sv<=1.5)userSpeed=sv}catch(e){}
 var VKEY="eng-cards-voice-v1",voiceName="";
 try{voiceName=localStorage.getItem(VKEY)||""}catch(e){}
 function enVoices(){return window.speechSynthesis?speechSynthesis.getVoices().filter(function(v){return /^en[-_]/i.test(v.lang)}):[]}
@@ -161,17 +169,24 @@ function b64ToUrl(j){var bin=atob(j.b64),n=bin.length,u=new Uint8Array(n),i,type
 for(i=0;i<n;i++)u[i]=bin.charCodeAt(i);
 if(j.fmt==="pcm"){u=wav(u,j.rate||44100);type="audio/wav"}
 return URL.createObjectURL(new Blob([u],{type:type}))}
-function aiFetch(t){var plain=t.replace(/\[\[|\]\]/g,"");
-if(aiCache[plain])return aiCache[plain];
-var pr=fetch(TTS_URL+"?t="+encodeURIComponent(plain)).then(function(r){return r.json()}).then(function(j){if(!j.ok)throw new Error(j.err||"tts");return b64ToUrl(j)});
-pr.catch(function(){delete aiCache[plain]});
-aiCache[plain]=pr;return pr}
+function aiFetch(t,test){var plain=t.replace(/\[\[|\]\]/g,""),ck=plain+(test?"|test":"");
+if(aiCache[ck])return aiCache[ck];
+var pr=fetch(TTS_URL+"?t="+encodeURIComponent(plain)+(test?"&test=1":"")).then(function(r){return r.json()}).then(function(j){if(!j.ok)throw new Error(j.err||"tts");return b64ToUrl(j)});
+pr.catch(function(){delete aiCache[ck]});
+aiCache[ck]=pr;return pr}
 function stopAI(){if(aiAudio){try{aiAudio.pause()}catch(e){}aiAudio=null}}
 function speakAI(t,r,cb,st){stopAI();if(window.speechSynthesis)speechSynthesis.cancel();
 aiFetch(t).then(function(url){var a=new Audio(url);aiAudio=a;a.playbackRate=r||1;
 if(st)a.addEventListener("playing",function(){st()},{once:true});
 if(cb)a.onended=cb;
 return a.play()}).catch(function(){browserSpeak(t,r,cb,st)})}
+function testSpeak(text,rate){rate=rate||1;var m=document.getElementById("vmsg");m.textContent="";
+if(rec)return;
+if(aiOn()&&!isSheetSentence(text)){stopAI();if(window.speechSynthesis)speechSynthesis.cancel();
+m.textContent="AI дауыс жасалуда…";
+aiFetch(text,true).then(function(url){m.textContent="";var a=new Audio(url);aiAudio=a;a.playbackRate=rate;return a.play()}).catch(function(){m.textContent="AI дауыс бұл мәтінді оқи алмады (сервер тест режимін қолдамайды немесе шек таусылды). Браузер дауысымен оқылды.";browserSpeak(text,rate)});
+return}
+speak(text,rate)}
 function speak(t,r,cb,st){if(rec)return;
 if(aiOn()&&isSheetSentence(t)){speakAI(t,r,cb,st);return}
 stopAI();browserSpeak(t,r,cb,st)}
@@ -206,7 +221,7 @@ document.getElementById("stat").textContent="Білемін: "+done+" / "+total+
 if(cur===null){st.innerHTML='<div class="card done"><p class="sent">Бәрін қайталап шықтың!</p><div class="row" style="justify-content:center"><button class="main" id="again" type="button">Қайтадан бастау</button></div></div>';
 document.getElementById("again").onclick=function(){known=[];saveKnown();start()};return}
 var c=a[cur],w=selW||wordOf(c),h='<div class="card"><p class="sent">'+sentHtml(c)+'</p><p class="tip" style="margin:0">Кез келген сөзді бас: сары белгі сол сөзге ауысады, сурет те сол сөз бойынша ашылады.</p>';
-h+='<div class="row"><a class="btn" target="_blank" rel="noopener" href="https://www.google.com/search?tbm=isch&q='+encodeURIComponent(w)+'">Суретті көру</a><button id="say" type="button">Тыңдау</button><button id="slow" type="button">Баяу тыңдау</button></div>';
+h+='<div class="row"><a class="btn" target="_blank" rel="noopener" href="https://www.google.com/search?tbm=isch&q='+encodeURIComponent(w)+'">Суретті көру</a><button id="say" type="button">Тыңдау</button><button id="slow" type="button">Баяу 0.65x</button><button id="spdgo" type="button">▶ Өз жылдамдығым '+userSpeed.toFixed(2)+'x</button></div>';
 h+='<div class="row">'+(rec?'<button id="micstop" type="button">⏹ Тоқтату</button><span class="tip" style="margin:0;align-self:center">Жазылуда… сөйле</span>':'<button id="mic" type="button">🎤 Жазу</button>')+(myUrl&&!rec?'<button id="mine" type="button">▶ Менің дауысым</button><button id="cmp" type="button">⇄ Салыстыру</button>':'')+'</div>'+(micMsg?'<p class="tip" style="margin:0">'+esc(micMsg)+'</p>':'');
 if(shown){h+='<div class="back">'+(c[4]?'<p class="tr">'+esc(c[4])+'</p>':'')+(c[6]?'<p class="tr ru">'+esc(c[6])+'</p>':'')+wordBack(c)+'</div>';
 h+='<div class="row"><button id="hard" type="button">Қайта қарау</button><button class="main" id="know" type="button">Білемін</button></div>'}
@@ -217,6 +232,8 @@ Array.prototype.forEach.call(st.querySelectorAll(".w"),function(el){var f=functi
 if(aiOn()&&isSheetSentence(c[0]))aiFetch(c[0]).catch(function(){});
 if(sy)sy.onclick=function(){speak(c[0],1)};
 if(sl)sl.onclick=function(){speak(c[0],.65)};
+var sg=document.getElementById("spdgo");
+if(sg)sg.onclick=function(){speak(c[0],userSpeed)};
 var e1;if(e1=document.getElementById("mic"))e1.onclick=micStart;
 if(e1=document.getElementById("micstop"))e1.onclick=micStop;
 if(e1=document.getElementById("mine"))e1.onclick=playMine;
@@ -252,7 +269,14 @@ SHEET=rows.length?rows:null;start()}).catch(function(){start()})}
 var TTS_URL="https://script.google.com/macros/s/AKfycbwDQP1cVzG-KGnRUnsFMX_5wahd7yCsAO_RNSkMERlyJrYUpb20CbmzCn57mBob5fWl/exec";
 fillVoices();if(window.speechSynthesis)speechSynthesis.onvoiceschanged=fillVoices;
 document.getElementById("voice").onchange=function(){voiceName=this.value;try{localStorage.setItem(VKEY,voiceName)}catch(e){}};
-document.getElementById("vtest").onclick=function(){var s=(SHEET&&SHEET.length)?SHEET[0].s:"Hi! This is how I sound. Let me grab a coffee before work.";speak(s,1)};
+function testText(){return document.getElementById("vtext").value.trim()||((SHEET&&SHEET.length)?SHEET[0].s:"Hi! This is how I sound. Let me grab a coffee before work.")}
+document.getElementById("vtest").onclick=function(){testSpeak(testText())};
+document.getElementById("vtest2").onclick=function(){testSpeak(testText(),userSpeed)};
+var spEl=document.getElementById("spd");
+function showSpeed(){document.getElementById("spdv").textContent=userSpeed.toFixed(2)+"x";var g=document.getElementById("spdgo");if(g)g.textContent="▶ Өз жылдамдығым "+userSpeed.toFixed(2)+"x"}
+spEl.value=userSpeed;showSpeed();
+spEl.oninput=function(){userSpeed=+spEl.value;showSpeed();try{localStorage.setItem(SPKEY,String(userSpeed))}catch(e){}};
+document.getElementById("vtext").onkeydown=function(e){if(e.key==="Enter"){e.preventDefault();document.getElementById("vtest").onclick()}};
 loadSheet();
 </script>
 </body>
